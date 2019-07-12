@@ -11,11 +11,9 @@ console.log(`email=${email}`);
 console.log(`password=${password}`);
 
 var db;
-var qdb;
 var q=new queue({Delay:1});
 
 db=new sqlite3.Database(DB_FILE);
-qdb=new queue_db(db);
 
 db.run("BEGIN TRANSACTION");
 
