@@ -1,7 +1,8 @@
 const sqlite3=require("sqlite3");
 const queue=require("./queue");
-const queue_db=require("./queue_db");
 const fs=require("fs");
+
+const DB_FILE="./test.db";
 
 var {email,password}=JSON.parse(fs.readFileSync("./account.json"));
 var uid;
@@ -13,13 +14,70 @@ var db;
 var qdb;
 var q=new queue({Delay:1});
 
-q.on("run",()=>{db=new sqlite3.Database("./test.db");qdb=new queue_db(db)});
-q.on("stop",()=>{db.close()});
+db=new sqlite3.Database(DB_FILE);
+qdb=new queue_db(db);
 
-q.add(
-    "http://localhost:3000/login/status",
-    checkLoginStatus
-);
+db.run("BEGIN TRANSACTION");
+
+q.on("run",()=>{});
+q.on("stop",()=>{
+    compareData();
+});
+
+checkGrabTime();
+
+function checkGrabTime(){
+    var query=`SELECT COUNT(*) AS CNT FROM GrabTimeLog 
+                WHERE GrabDate=Date("now","localtime")`;
+    db.get(query,(err,{CNT})=>{
+        console.log(`CNT=${CNT}`);
+        if(CNT!=0){
+            //delete today's data
+            console.log("Already grabbed today");
+            deleteData();
+            //grab again
+            //compare
+        } else {
+            //move and replace data
+            console.log("Haven't grabbed today");
+            moveData();
+            //grab data
+            //compare
+        }
+    });
+}
+
+function moveData(){
+    db.serialize(()=>{
+        //db.run("BEGIN TRANSACTION")
+        db.run("DELETE FROM __Playlists")
+          .run("DELETE FROM __Songs")
+          .run("DELETE FROM __Belongs")
+          .run("INSERT INTO __Playlists SELECT * FROM Playlists")
+          .run("INSERT INTO __Songs SELECT * FROM Songs")
+          .run("INSERT INTO __Belongs SELECT * FROM Belongs",deleteData)
+        //  .run("COMMIT",deleteData);
+    });
+}
+
+function deleteData(){
+    db.serialize(()=>{
+        //db.run("BEGIN TRANSACTION")
+        db.run("DELETE FROM Playlists")
+          .run("DELETE FROM Songs")
+          .run("DELETE FROM Belongs",grabData)
+        //  .run("COMMIT",grabData);
+    });
+}
+
+function grabData(){
+    db.run(`INSERT INTO GrabTimeLog (GrabDate,GrabTime) VALUES 
+                (Date("now","localtime"),Time("now","localtime"))`);
+    q.add(
+        "http://localhost:3000/login/status",
+        checkLoginStatus
+    );
+}
 
 function checkLoginStatus(data){
     data=JSON.parse(data);
@@ -79,7 +137,7 @@ function getPlaylists(rubbish){
 
 function savePlaylists(playlists){
     db.serialize(()=>{
-        db.run("BEGIN TRANSACTION");
+        //db.run("BEGIN TRANSACTION");
         db.parallelize(()=>{
             playlists.forEach(({id,name,coverImgUrl,trackCount,subscribed})=>{
                 db.run(
@@ -89,7 +147,7 @@ function savePlaylists(playlists){
                 console.log(`Writing playlist   ${name}`);
             });
         });
-        db.run("COMMIT");
+        //db.run("COMMIT");
         playlists.forEach(({id})=>{
             getPlaylistDetail(id);
         })
@@ -128,7 +186,7 @@ function getSongs(data){
     console.log(`Inspecting ${playlist.name}(${q.len})`);
     var i;
     db.serialize(()=>{
-        db.run("BEGIN TRANSACTION");
+        //db.run("BEGIN TRANSACTION");
         db.parallelize(()=>{
             for(i=0;i<playlist.tracks.length;i++){
                 var {id,name}=playlist.tracks[i];
@@ -143,30 +201,52 @@ function getSongs(data){
                 );
                 console.log(`Writing Song (${id})(${available})${name}(${q.len})`);
             }
-            for(;i<playlist.trackIds.length;i++){
-                id=playlist.trackIds[i].id;
-                db.run(
-                    "INSERT INTO Belongs (Sid,Pid) VALUES (?,?)",
-                    [id,playlist.id]
-                );
+            while(i<playlist.trackIds.length){
+                var songCnt=0;
+                var url="http://localhost:3000/song/detail?ids=";
+                var ids="";
+                while(i<playlist.trackIds.length&&songCnt<1000){
+                    id=playlist.trackIds[i].id;
+                    db.run(
+                        "INSERT INTO Belongs (Sid,Pid) VALUES (?,?)",
+                        [id,playlist.id]
+                    );
+                    ids=ids+","+id;
+                    i++;songCnt++;
+                }
+                url+=ids.substr(1);
                 q.add(
-                    `http://localhost:3000/song/detail?ids=${id}`,
+                    url,
                     saveSongDetail,
                     verifySongDetail
                 );
             }
         });
-        db.run("COMMIT");
+        //db.run("COMMIT");
     });
 }
 
 function saveSongDetail(data){
-    var song=data.songs[0];
-    var available=data.privileges[0].cp;
-    var {id,name}=song;
-    console.log(`*Writing Song (${id})(${available})${name}(${q.len})(${qdb.len})`);
-    qdb.add(
-        "INSERT OR REPLACE INTO Songs (Sid,Name,Available) VALUES (?,?,?)",
-        [id,name,available]
-    );
+    db.serialize(()=>{
+        //db.run("BEGIN TRANSACTION");
+        for(let i=0;i<data.songs.length;i++){
+            var song=data.songs[i];
+            var available=data.privileges[i].cp;
+            var {id,name}=song;
+            console.log(`*Writing Song (${id})(${available})${name}(${q.len})`);
+            db.run(
+                "INSERT OR REPLACE INTO Songs (Sid,Name,Available) VALUES (?,?,?)",
+                [id,name,available]
+            );
+        }
+        //db.run("COMMIT");
+    });
+}
+
+function compareData(){
+    db.run("COMMIT");
+    fs.readFile("./compare.sql",{encoding:"utf8"},(err,data)=>{
+        if(err)throw err;
+        db.exec(data);
+    });
 }
