@@ -8,7 +8,9 @@ INSERT INTO Playlists_Changes
         "CHG" AS ChangeType,
         __Playlists.Pid AS Pid,
         __Playlists.Name AS OldName,
-        Playlists.Name AS NewName
+        Playlists.Name AS NewName,
+        0 AS SongsAdded,
+        0 AS SongsDeleted
     FROM Playlists INNER JOIN __Playlists ON Playlists.Pid=__Playlists.Pid
         WHERE NewName<>OldName
     UNION
@@ -17,7 +19,9 @@ INSERT INTO Playlists_Changes
         "ADD" AS ChangeType,
         Playlists.Pid AS Pid,
         NULL AS OldName,
-        Playlists.Name AS NewName
+        Playlists.Name AS NewName,
+        0 AS SongsAdded,
+        0 AS SongsDeleted
     FROM Playlists 
         WHERE NOT EXISTS (
             SELECT __Playlists.Pid FROM __Playlists 
@@ -29,14 +33,15 @@ INSERT INTO Playlists_Changes
         "DEL" AS ChangeType,
         __Playlists.Pid AS Pid,
         __Playlists.Name AS OldName,
-        NULL AS NewName
+        NULL AS NewName,
+        0 AS SongsAdded,
+        0 AS SongsDeleted
     FROM __Playlists 
         WHERE NOT EXISTS (
             SELECT Playlists.Pid FROM Playlists 
                 WHERE __Playlists.Pid=Playlists.Pid
         );
     
-
 /*查找发生变化的歌单，包括：新增的歌单、被删除的歌单、更名的歌单*/
 
 
@@ -105,4 +110,69 @@ INSERT INTO Belongs_Changes
             SELECT * FROM Belongs
                 WHERE __Belongs.Sid=Belongs.Sid AND __Belongs.Pid=Belongs.Pid
         );
+
 /*查找变化的隶属关系，包括：新增的隶属关系，被删除的隶属关系*/
+
+DROP TABLE IF EXISTS Temp_ADD;
+CREATE TEMPORARY TABLE Temp_ADD AS
+    SELECT 
+        Belongs_Changes.ChangeDate AS ChangeDate,
+        "CHG" AS ChangeType,
+        Belongs_Changes.Pid AS Pid,
+        Playlists.Name AS OldName,
+        Playlists.Name AS NewName,
+        COUNT(*) AS SongsAdded 
+    FROM Belongs_Changes INNER JOIN Playlists ON Playlists.Pid=Belongs_Changes.Pid
+        WHERE ChangeDate=Date("now","localtime") AND ChangeType="ADD"
+        GROUP BY Belongs_Changes.Pid;
+    
+UPDATE Playlists_Changes 
+    SET SongsAdded=(
+        SELECT Temp_ADD.SongsAdded 
+        FROM Temp_ADD 
+        WHERE Temp_ADD.ChangeDate=Playlists_Changes.ChangeDate
+            AND Temp_ADD.Pid=Playlists_Changes.Pid
+    )
+WHERE EXISTS (
+    SELECT * 
+    FROM Temp_ADD
+    WHERE Temp_ADD.ChangeDate=Playlists_Changes.ChangeDate
+        AND Temp_ADD.Pid=Playlists_Changes.Pid
+);
+
+INSERT OR IGNORE INTO Playlists_Changes (ChangeDate,ChangeType,Pid,OldName,NewName,SongsAdded)
+    SELECT * FROM Temp_ADD;
+DROP TABLE IF EXISTS Temp_ADD;
+/* 记录歌单增加的歌曲数目变化 */
+
+DROP TABLE IF EXISTS Temp_DEL;
+CREATE TEMPORARY TABLE Temp_DEL AS
+    SELECT 
+        Belongs_Changes.ChangeDate AS ChangeDate,
+        "CHG" AS ChangeType,
+        Belongs_Changes.Pid AS Pid,
+        __Playlists.Name AS OldName,
+        __Playlists.Name AS NewName,
+        COUNT(*) AS SongsDeleted 
+    FROM Belongs_Changes INNER JOIN __Playlists ON __Playlists.Pid=Belongs_Changes.Pid
+        WHERE ChangeDate=Date("now","localtime") AND ChangeType="DEL"
+        GROUP BY Belongs_Changes.Pid;
+    
+UPDATE Playlists_Changes 
+    SET SongsDeleted=(
+        SELECT Temp_DEL.SongsDeleted 
+        FROM Temp_DEL 
+        WHERE Temp_DEL.ChangeDate=Playlists_Changes.ChangeDate
+            AND Temp_DEL.Pid=Playlists_Changes.Pid
+    )
+WHERE EXISTS (
+    SELECT * 
+    FROM Temp_DEL
+    WHERE Temp_DEL.ChangeDate=Playlists_Changes.ChangeDate
+        AND Temp_DEL.Pid=Playlists_Changes.Pid
+);
+
+INSERT OR IGNORE INTO Playlists_Changes (ChangeDate,ChangeType,Pid,OldName,NewName,SongsDeleted)
+    SELECT * FROM Temp_DEL;
+DROP TABLE IF EXISTS Temp_DEL;
+/* 记录歌单减少的歌曲数目变化 */

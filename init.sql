@@ -32,13 +32,15 @@ CREATE TABLE IF NOT EXISTS Belongs (
 
 CREATE TABLE IF NOT EXISTS Playlists_Changes (
     ChangeDate UNSIGNED BIGINT NOT NULL,
-    ChangeType TEXT NOT NULL,
+    ChangeType TEXT NOT NULL DEFAULT "CHG",
     Pid UNSIGNED BIGINT NOT NULL,
     OldName TEXT,
     NewName TEXT,
+    SongsAdded UNSIGNED BIGINT NOT NULL DEFAULT 0,
+    SongsDeleted UNSIGNED BIGINT NOT NULL DEFAULT 0,
     
     CONSTRAINT pk_PC 
-        PRIMARY KEY (ChangeDate,ChangeType,Pid,OldName,NewName)
+        PRIMARY KEY (ChangeDate,Pid)
 );
 
 CREATE TABLE IF NOT EXISTS Songs_Changes (
@@ -51,7 +53,7 @@ CREATE TABLE IF NOT EXISTS Songs_Changes (
     NewName TEXT,
     
     CONSTRAINT pk_SC 
-        PRIMARY KEY (ChangeDate,ChangeType,Sid,OldAvailable,NewAvailable,OldName,NewName)
+        PRIMARY KEY (ChangeDate,Sid)
 );
 
 CREATE TABLE IF NOT EXISTS Belongs_Changes (
@@ -61,7 +63,7 @@ CREATE TABLE IF NOT EXISTS Belongs_Changes (
     Pid UNSIGNED BIGINT NOT NULL,
     
     CONSTRAINT pk_BC
-        PRIMARY KEY (ChangeDate,ChangeType,Sid,Pid)
+        PRIMARY KEY (ChangeDate,Sid,Pid)
 );
 
 CREATE TABLE IF NOT EXISTS __Playlists (

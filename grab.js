@@ -3,6 +3,7 @@ const queue=require("./queue");
 const fs=require("fs");
 
 const DB_FILE="./test.db";
+const DB_FILE_ONLINE="./test_online.db"
 
 var {email,password}=JSON.parse(fs.readFileSync("./account.json"));
 var uid;
@@ -188,7 +189,7 @@ function getSongs(data){
         db.parallelize(()=>{
             for(i=0;i<playlist.tracks.length;i++){
                 var {id,name}=playlist.tracks[i];
-                var available=data.privileges[i].cp;
+                var available=Boolean(data.privileges[i].cs||data.privileges[i].cp);
                 db.run(
                     "INSERT OR REPLACE INTO Songs (Sid,Name,Available) VALUES (?,?,?)",
                     [id,name,available]
@@ -229,7 +230,7 @@ function saveSongDetail(data){
         //db.run("BEGIN TRANSACTION");
         for(let i=0;i<data.songs.length;i++){
             var song=data.songs[i];
-            var available=data.privileges[i].cp;
+            var available=Boolean(data.privileges[i].cs||data.privileges[i].cp);
             var {id,name}=song;
             console.log(`*Writing Song (${id})(${available})${name}(${q.len})`);
             db.run(
@@ -246,5 +247,8 @@ function compareData(){
     fs.readFile("./compare.sql",{encoding:"utf8"},(err,data)=>{
         if(err)throw err;
         db.exec(data);
+        fs.copyFile(DB_FILE,DB_FILE_ONLINE,(err)=>{
+            if(err)throw err;
+        })
     });
 }
