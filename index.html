@@ -1,0 +1,273 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8">
+		<meta name="viewport" content="width=device-width,initial-scale=1.0">
+        <style>
+            @media screen and (max-width: 920px) {
+                body {font-size:30px;}
+            }
+            @media screen and (max-width: 600px) {
+                body {font-size:10px;}
+            }
+            .hide { display : none; }
+            ul {
+                list-style-type : none;
+                margin : 0;
+            }
+            ::before, .preview, .notice{
+                color : #FFFFFF;
+                background-color : #000000;
+                font-weight : bold;
+                padding-left : 1%;
+                padding-right : 1%;
+                text-align : center;
+                user-select : none;
+            }
+            a.jump, #getDataButton {
+                text-decoration : none;
+                background-color : #eeeeee;
+                color : #000000;
+                user-select : none;
+                padding-left : 1%;
+                padding-right : 1%;
+                font-weight : bold;
+                text-align : center;
+            }
+            a.jump:hover, #getDataButton:hover {
+                background-color : #888888;
+            }
+            a.jump:active, #getDataButton:active {
+                background-color : #000000;
+                color : #FFFFFF;
+            }
+            .playlistName {
+                padding-left : 2%;
+                padding-right : 2%;
+                user-select : none;
+            }
+            .playlistName:hover {
+                background-color : #888888;
+            }
+            .timeBanner {
+                padding-left : 2%;
+                padding-right : 2%;
+                user-select : none;
+            }
+            .timeBanner:hover {
+                background-color : #888888;
+            }
+            .songName {
+                padding-left : 1%;
+                padding-right : 1%;
+                user-select : none;
+            }
+            .songName:hover {
+                background-color : #888888;
+            }
+            
+            .notAvailable {
+                color : #777777;
+                font-style : italic;
+            }
+                      
+            .songLI.Delete::before { content : "删除歌曲："; }
+            .songLI.Add::before    { content : "新增歌曲："; }
+            .songLI.Change::before { content : "歌曲："; }
+            .playlistLI.Delete::before { content : "删除歌单："; }
+            .playlistLI.Add::before    { content : "新增歌单："; }
+            .playlistLI.Change::before { content : "歌单："; }
+            .playlistLI.Delete.subscribed::before { content : "删除收藏歌单："; }
+            .playlistLI.Add.subscribed::before    { content : "新增收藏歌单："; }
+            .playlistLI.Change.subscribed::before { content : "收藏歌单："; }
+            .snapShot::before { content : "记录时间："; }
+        </style>
+        <script>
+            var queryDate=new Date();
+            queryDate.toYesterday=function(){
+                this.setTime(this.getTime()-86400000);
+                return this;
+            }
+            queryDate.toQueryDate=function(){
+                var year=this.getFullYear();
+                var month=this.getMonth()+1;
+                var dat=this.getDate();
+                month=`${month<10?"0":""}${month}`;
+                dat=`${dat<10?"0":""}${dat}`;
+                return `${year}-${month}-${dat}`;
+            }
+            function getData(){
+                var xhr=new XMLHttpRequest();
+                xhr.queryDate=new Date(queryDate.getTime());
+                xhr.queryDate.toQueryDate=queryDate.toQueryDate;
+                xhr.queryDate.toYesterday=queryDate.toYesterday;
+                xhr.onreadystatechange=function(){
+                    if(this.readyState==4&&this.status==200){
+                        createJsonFromData(JSON.parse(this.response),this.queryDate);
+                    }
+                }
+                xhr.open("GET",`/S1NCM/data?date=${queryDate.toQueryDate()}`);
+                xhr.send();
+                queryDate.toYesterday();
+            }
+            function walk(process){
+                if(!this.walked){
+                    this.Adds=[];
+                    this.Dels=[];
+                    this.Chgs=[];
+                    this.SubAdds=[];
+                    this.SubDels=[];
+                    this.SubChgs=[];
+                    Object.values(this).forEach((itm)=>{
+                        switch(itm.ChangeType){
+                            case "ADD":if(itm.Subscribed){this.SubAdds.push(itm);}else{this.Adds.push(itm);}break;
+                            case "DEL":if(itm.Subscribed){this.SubDels.push(itm);}else{this.Dels.push(itm);}break;
+                            case "CHG":if(itm.Subscribed){this.SubChgs.push(itm);}else{this.Chgs.push(itm);}break;
+                        }
+                    });
+                    this.walked=true;
+                }
+                this.Adds.forEach(process);
+                this.Dels.forEach(process);
+                this.Chgs.forEach(process);
+                this.SubAdds.forEach(process);
+                this.SubDels.forEach(process);
+                this.SubChgs.forEach(process);
+            }
+            function createJsonFromData(data,queryDate){
+                var playlists=data.Playlists_Changes;
+                var songs=data.Belongs_Changes;
+                var node={};
+                playlists.forEach((playlist)=>{
+                    node[playlist.Pid]=playlist;
+                    node[playlist.Pid].data={};
+                    node[playlist.Pid].data.walk=walk;
+                })
+                songs.forEach((song)=>{
+                    node[song.Pid].data[song.Sid]=song;
+                });
+                data.Songs_Changes.forEach((song)=>{
+                    node[song.Pid].data[song.Sid]=song;
+                });
+                node.walk=walk;
+                console.log(node);
+                createElementFromJson(node,queryDate);
+            }
+            function createJumpButton(href){
+                var jmpEle=document.createElement("a");
+                jmpEle.textContent="JUMP";
+                jmpEle.setAttribute("class","jump");
+                jmpEle.setAttribute("href",href);
+                jmpEle.setAttribute("target","_blank");
+                return jmpEle;
+            }
+            function toggleHide(){
+                this.parentElement.querySelector("ul").classList.toggle("hide");
+            }
+            function createElementFromJson(data,queryDate){
+                console.log(queryDate);
+                var snapShot=document.createElement("div");
+                snapShot.setAttribute("class","snapShot");
+                var timeBanner=document.createElement("span");
+                timeBanner.textContent=`${queryDate.getFullYear()}年${queryDate.getMonth()+1}月${queryDate.getDate()}日`;
+                timeBanner.setAttribute("class","timeBanner");
+                timeBanner.addEventListener("click",toggleHide);
+                snapShot.appendChild(timeBanner);
+                var playlistChangeList=document.createElement("ul");
+                playlistChangeList.setAttribute("class","playlistChangeList hide");
+                snapShot.appendChild(playlistChangeList);
+                var playlistAddCnt=0;
+                var playlistDelCnt=0;
+                var songAddCnt=0;
+                var songDelCnt=0;
+                data.walk((playlist)=>{
+                    if(playlist.ChangeType=="ADD"){playlistAddCnt+=1;}
+                    if(playlist.ChangeType=="DEL"){playlistDelCnt+=1;}
+                    songAddCnt+=playlist.SongsAdded;
+                    songDelCnt+=playlist.SongsDeleted;
+                    var playlistLI=document.createElement("li");
+                    var tmpClass="";
+                    if(playlist.Subscribed)tmpClass+=" subscribed";
+                    switch(playlist.ChangeType){
+                        case "CHG":tmpClass+=" Change";break;
+                        case "ADD":tmpClass+=" Add";break;
+                        case "DEL":tmpClass+=" Delete";break;
+                    }
+                    playlistLI.setAttribute("class","playlistLI"+tmpClass);
+                    if(playlist.ChangeType!="CHG"||playlist.OldName==playlist.NewName){
+                        var playlistName=document.createElement("span");
+                        playlistName.setAttribute("class","playlistName"+tmpClass);
+                        playlistName.textContent=playlist.NewName;
+                        playlistName.addEventListener("click",toggleHide);
+                        playlistLI.appendChild(playlistName);
+                    } else {
+                        var playlistOldName=document.createElement("span");
+                        playlistOldName.setAttribute("class","playlistName Old"+tmpClass);
+                        playlistOldName.textContent=playlist.OldName;
+                        playlistOldName.addEventListener("click",toggleHide);
+                        playlistLI.appendChild(playlistOldName);
+                        //playlistLI.appendChild(document.createElement("br"));
+                        playlistLI.appendChild(document.createTextNode("⇒	"));
+                        var playlistNewName=document.createElement("span");
+                        playlistNewName.setAttribute("class","playlistName New"+tmpClass);
+                        playlistNewName.textContent=playlist.NewName;
+                        playlistNewName.addEventListener("click",toggleHide);
+                        playlistLI.appendChild(playlistNewName);
+                    }
+                    var songList=document.createElement("ul");
+                    songList.setAttribute("class","songList hide");
+                    playlist.data.walk((song)=>{
+                        var tmpClass="";
+                        switch(song.ChangeType){
+                            case "ADD":tmpClass+=" Add";break;
+                            case "DEL":tmpClass+=" Delete";break;
+                            case "CHG":tmpClass+=" Change";break;
+                        }
+                        var songLI=document.createElement("li");
+                        songLI.setAttribute("class","songLI"+tmpClass);
+                        if(song.ChangeType!="CHG"){
+                            if(!song.Available)tmpClass+=" notAvailable";
+                            var songName=document.createElement("span");
+                            songName.setAttribute("class","songName"+tmpClass);
+                            songName.textContent=song.Name;
+                            songLI.appendChild(songName);
+                        } else {
+                            var songOldName=document.createElement("span");
+                            var tmpClassOld=tmpClass;
+                            if(!song.OldAvailable)tmpClassOld+=" notAvailable";
+                            songOldName.setAttribute("class","songName old"+tmpClassOld);
+                            songOldName.textContent=song.OldName;
+                            var songNewName=document.createElement("span");
+                            var tmpClassNew=tmpClass;
+                            if(!song.NewAvailable)tmpClassNew+=" notAvailable";
+                            songNewName.setAttribute("class","songName new"+tmpClassNew);
+                            songNewName.textContent=song.NewName;
+                            songLI.appendChild(songOldName);
+                            //songLI.appendChild(document.createElement("br"));
+                            songLI.appendChild(document.createTextNode("⇒	"));
+                            songLI.appendChild(songNewName);
+                        }
+                        songLI.append(createJumpButton(`https://music.163.com/#/song?id=${song.Sid}`));
+                        songList.appendChild(songLI);
+                    });
+                    var songChangePreview=document.createElement("span");
+                    songChangePreview.setAttribute("class","preview");
+                    songChangePreview.textContent=` 歌曲+${playlist.SongsAdded}-${playlist.SongsDeleted} `;
+                    playlistLI.append(songChangePreview);
+                    playlistLI.appendChild(createJumpButton(`https://music.163.com/#/playlist?id=${playlist.Pid}`));
+                    playlistLI.appendChild(songList);
+                    playlistChangeList.appendChild(playlistLI);
+                });
+                var playlistChangePreview=document.createElement("span");
+                playlistChangePreview.setAttribute("class","preview");
+                playlistChangePreview.textContent=`歌单+${playlistAddCnt}-${playlistDelCnt}/歌曲+${songAddCnt}-${songDelCnt}`;
+                timeBanner.insertAdjacentElement("afterend",playlistChangePreview);
+                getDataButton.insertAdjacentElement("beforebegin",snapShot);
+            }
+        </script>
+    </head>
+    <body>
+        <div class="notice"><span class="notAvailable">灰色斜体字</span>  表示该歌曲暂不能收听</div>
+        <div id="getDataButton" onclick="getData();">获取记录</div>
+    </body>
+</html>

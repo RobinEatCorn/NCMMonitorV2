@@ -176,3 +176,31 @@ INSERT OR IGNORE INTO Playlists_Changes (ChangeDate,ChangeType,Pid,OldName,NewNa
     SELECT * FROM Temp_DEL;
 DROP TABLE IF EXISTS Temp_DEL;
 /* 记录歌单减少的歌曲数目变化 */
+
+INSERT OR IGNORE INTO Playlists_Changes
+    SELECT 
+        Songs_Changes.ChangeDate AS ChangeDate,
+        "CHG" AS ChangeType,
+        Playlists.Pid AS Pid,
+        Playlists.Name AS OldName,
+        Playlists.Name AS NewName,
+        0 AS SongsAdded,
+        0 AS SongsDeleted
+    FROM Songs_Changes INNER JOIN Playlists ON 
+        EXISTS (
+            SELECT * FROM Belongs 
+            WHERE Belongs.Pid=Playlists.Pid AND
+                Songs_Changes.Sid=Belongs.Sid
+        )
+    WHERE Songs_Changes.ChangeType="CHG"
+        AND Songs_Changes.ChangeDate=Date("now","localtime");
+/* 如果一首歌曲发生变化，那么在Playlists_Changes中提一嘴包含它的歌单。
+   发生变化的歌曲（比如名字变化,可收听状态变化）不会被计算到SongsAdded或SongsDeleted中去。 */
+
+INSERT OR REPLACE INTO All_Songs SELECT * FROM __Songs;
+INSERT OR REPLACE INTO All_Songs SELECT * FROM Songs;
+/* 更新全歌曲库 */
+
+INSERT OR REPLACE INTO All_Playlists SELECT * FROM __Playlists;
+INSERT OR REPLACE INTO All_Playlists SELECT * FROM Playlists;
+/* 更新全歌单库 */

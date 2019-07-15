@@ -174,6 +174,9 @@ function getPlaylistDetail(id){
 function verifySongDetail(data){
     data=JSON.parse(data);
     if(data&&data.code&&data.code==200){
+        data.privileges.forEach((pr)=>{
+            if(!pr.st)return null;
+        });
         return data;
     } else {
         return null;
@@ -189,7 +192,8 @@ function getSongs(data){
         db.parallelize(()=>{
             for(i=0;i<playlist.tracks.length;i++){
                 var {id,name}=playlist.tracks[i];
-                var available=Boolean(data.privileges[i].cs||data.privileges[i].cp);
+                //var available=Boolean(data.privileges[i].cs||data.privileges[i].cp);
+                var available=(data.privileges[i].st>=0);
                 db.run(
                     "INSERT OR REPLACE INTO Songs (Sid,Name,Available) VALUES (?,?,?)",
                     [id,name,available]
@@ -228,9 +232,20 @@ function getSongs(data){
 function saveSongDetail(data){
     db.serialize(()=>{
         //db.run("BEGIN TRANSACTION");
+        if(data.songs.length!=data.privileges.length){
+            console.log(`songs:${data.songs.length},privis:${data.privileges.length}`);
+            console.log(data.songs);
+            console.log(data.privileges);
+        }
         for(let i=0;i<data.songs.length;i++){
             var song=data.songs[i];
-            var available=Boolean(data.privileges[i].cs||data.privileges[i].cp);
+            try{
+                var available=(data.privileges[i].st>=0);
+            } catch {
+                console.log(data.privileges[i]);
+                console.log(i);
+                throw Error("No st");
+            }
             var {id,name}=song;
             console.log(`*Writing Song (${id})(${available})${name}(${q.len})`);
             db.run(
@@ -246,9 +261,11 @@ function compareData(){
     db.run("COMMIT");
     fs.readFile("./compare.sql",{encoding:"utf8"},(err,data)=>{
         if(err)throw err;
-        db.exec(data);
-        fs.copyFile(DB_FILE,DB_FILE_ONLINE,(err)=>{
+        db.exec(data,(err)=>{
             if(err)throw err;
-        })
+            fs.copyFile(DB_FILE,DB_FILE_ONLINE,(err)=>{
+                if(err)throw err;
+            })
+        });
     });
 }
