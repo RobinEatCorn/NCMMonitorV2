@@ -18,7 +18,7 @@ INSERT INTO Playlists_Changes
         Date("now","localtime") AS ChangeDate,
         "ADD" AS ChangeType,
         Playlists.Pid AS Pid,
-        NULL AS OldName,
+        Playlists.Name AS OldName,
         Playlists.Name AS NewName,
         0 AS SongsAdded,
         0 AS SongsDeleted
@@ -33,7 +33,7 @@ INSERT INTO Playlists_Changes
         "DEL" AS ChangeType,
         __Playlists.Pid AS Pid,
         __Playlists.Name AS OldName,
-        NULL AS NewName,
+        __Playlists.Name AS NewName,
         0 AS SongsAdded,
         0 AS SongsDeleted
     FROM __Playlists 
@@ -64,7 +64,7 @@ INSERT INTO Songs_Changes
         Songs.Sid AS Sid,
         NULL AS OldAvailable,
         Songs.Available AS NewAvailable,
-        NULL As OldName,
+        Songs.Name As OldName,
         Songs.Name AS NewName
     FROM Songs
         WHERE NOT EXISTS (
@@ -79,7 +79,7 @@ INSERT INTO Songs_Changes
         __Songs.Available AS OldAvailable,
         NULL AS NewAvailable,
         __Songs.Name As OldName,
-        NULL AS NewName
+        __Songs.Name AS NewName
     FROM __Songs
         WHERE NOT EXISTS (
             SELECT Songs.Sid FROM Songs
