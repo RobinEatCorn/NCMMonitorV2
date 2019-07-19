@@ -3,11 +3,29 @@ const sqlite3=require("sqlite3");
 const url=require("url");
 const qs=require("querystring");
 const fs=require("fs");
+const path=require("path");
 
+var DB_FILE_ONLINE;
+var CFG_FILE=path.resolve(__dirname,"./config.json");
+var IDX_FILE;
+var db;
 
-const DB_ONLINE_FILE=`${__dirname}\\test_online.db`;
+fs.access(CFG_FILE,fs.constants.R_OK,(err)=>{
+    if(err){
+        throw Error("需要config.json文件，当前文件不存在或不可读取。该文件可通过修改config_template.json获得。");
+    } else {
+        var data=JSON.parse(fs.readFileSync(CFG_FILE));
+        DB_FILE_ONLINE=data["DB_FILE_ONLINE"];
+        IDX_FILE=data["IDX_FILE"];
+        if(!DB_FILE_ONLINE){throw Error(`config.json文件中缺少"DB_FILE_ONLINE"关键字。`);}
+        if(!IDX_FILE){throw Error(`config.json文件中缺少"IDX_FILE"关键字。`);}
+        DB_FILE_ONLINE=path.resolve(__dirname,DB_FILE_ONLINE);
+        IDX_FILE=path.resolve(__dirname,IDX_FILE);
+        db=new sqlite3.Database(DB_FILE_ONLINE);
+    }
+});
 
-var db=new sqlite3.Database(DB_ONLINE_FILE);
+//const DB_ONLINE_FILE=`${__dirname}\\test_online.db`;
 
 function handleData(req,res,reqURL,queries){
     var queryDate=queries.date;
@@ -74,7 +92,7 @@ function handleData(req,res,reqURL,queries){
 }
 
 function handleMainPage(req,res){
-    fs.readFile(`${__dirname}\\index.html`,(err,data)=>{
+    fs.readFile(IDX_FILE,(err,data)=>{
         if(err)throw err;
         res.setHeader("Content-Type","text/html; charset=utf-8");
         res.setHeader("Content-Length",data.length);

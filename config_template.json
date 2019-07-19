@@ -1,0 +1,9 @@
+{
+    "EMAIL":"xxxxxx",
+    "PSWD":"xxxxxx",
+    "DB_FILE":"./test.db",
+    "DB_FILE_ONLINE":"./test_online.db",
+    "DB_FILE_BACKUP":"./test_backup.db",
+    "IDX_FILE":"./index.html",
+    "GRAB_DELAY":1
+}
