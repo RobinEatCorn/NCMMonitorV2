@@ -1,29 +1,54 @@
 const sqlite3=require("sqlite3");
 const queue=require("./queue");
 const fs=require("fs");
+const process=require("process");
 
-const DB_FILE="./test.db";
-const DB_FILE_ONLINE="./test_online.db"
-
-var {email,password}=JSON.parse(fs.readFileSync("./account.json"));
+//const DB_FILE="./test.db";
+//const DB_FILE_ONLINE="./test_online.db"
+var EMAIL;
+var PSWD;
+var DB_FILE;
+var DB_FILE_ONLINE;
+var DB_FILE_BACKUP;
 var uid;
 
-console.log(`email=${email}`);
-console.log(`password=${password}`);
+var GRAB_FLAG=true;
+var CHECK_EXISTENCE=false;
 
 var db;
-var q=new queue({Delay:1});
+var q;
 
-db=new sqlite3.Database(DB_FILE);
-
-db.run("BEGIN TRANSACTION");
-
-q.on("run",()=>{});
-q.on("stop",()=>{
-    compareData();
+fs.access("./config.json",fs.constants.R_OK,(err)=>{
+    if(err){
+        throw Error("需要config.json文件，当前文件不存在或不可读取。该文件可通过修改config_template.json获得。");
+    } else {
+        fs.readFile("./config.json",{encoding:"utf8"},readConfig);
+    }
 });
 
-checkGrabTime();
+function readConfig(err,data){
+    if(err)throw err;
+    var {EMAIL,PSWD,DB_FILE,DB_FILE_ONLINE,DB_FILE_BACKUP,GRAB_DELAY}=JSON.parse(data);
+    if(!EMAIL){throw Error(`config.json文件中缺少"EMAIL"关键字。`);}
+    if(!PSWD){throw Error(`config.json文件中缺少"PSWD"关键字。`);}
+    if(!DB_FILE){throw Error(`config.json文件中缺少"DB_FILE"关键字。`);}
+    if(!GRAB_DELAY){DELAY=1;}
+    console.log(`email=${EMAIL}`);
+    console.log(`password=${PSWD}`);
+    determineAction();
+}
+
+function determineAction(){
+    db=new sqlite3.Database(DB_FILE);
+    q=new queue({Delay:GRAB_DELAY});
+    db.run("BEGIN TRANSACTION");
+    q.on("run",()=>{});
+    q.on("stop",()=>{
+        compareData();
+    });
+    checkGrabTime();
+}
+
 
 function checkGrabTime(){
     var query=`SELECT COUNT(*) AS CNT FROM GrabTimeLog 
@@ -104,7 +129,7 @@ function verifyLogin(data){
 function login(){
     console.log("Login...");
     q.add(
-        `http://localhost:3000/login?email=${email}&password=${password}`,
+        `http://localhost:3000/login?email=${EMAIL}&password=${PSWD}`,
         getPlaylists,
         verifyLogin
     );
@@ -128,7 +153,7 @@ function verifyPlaylists(data){
 
 function getPlaylists(rubbish){
     q.add(
-        `http://localhost:3000/user/playlist?uid=${uid}&limit=1000`,
+        `http://localhost:3000/user/playlist?uid=${uid}&limit=10000`,
         savePlaylists,
         verifyPlaylists
     );
@@ -155,7 +180,12 @@ function savePlaylists(playlists){
 }
 
 function verifyPlaylistDetail(data){
-    data=JSON.parse(data);
+    try {
+        data=JSON.parse(data);
+    } catch {
+        console.error(`[grab.js][verifyPlaylistDetail]Can't parse data:${data}`);
+        return null;
+    }
     if(data&&data.code&&data.code==200){
         return data;
     } else {
@@ -172,7 +202,12 @@ function getPlaylistDetail(id){
 }
 
 function verifySongDetail(data){
-    data=JSON.parse(data);
+    try {
+        data=JSON.parse(data);
+    } catch {
+        console.error(`[grab.js][verifySongDetail]Can't parse data:${data}`);
+        return null;
+    }
     if(data&&data.code&&data.code==200){
         data.privileges.forEach((pr)=>{
             if(!pr.st)return null;
@@ -208,7 +243,7 @@ function getSongs(data){
                 var songCnt=0;
                 var url="http://localhost:3000/song/detail?ids=";
                 var ids="";
-                while(i<playlist.trackIds.length&&songCnt<1000){
+                while(i<playlist.trackIds.length&&songCnt<500){
                     id=playlist.trackIds[i].id;
                     db.run(
                         "INSERT INTO Belongs (Sid,Pid) VALUES (?,?)",

@@ -43,7 +43,7 @@ class queue extends eventEmitter{
                     this.q.push({url,lives,callback,verify});
                     setTimeout(this.get.bind(this),this.defaultDelay);
                 } else {
-                    console.error(`ERROR: Can't get ${url}`);
+                    console.error(`[queue.js]ERROR: Can't get ${url}`);
                     if(this.q.length>0){
                         setTimeout(this.get.bind(this),this.defaultDelay);
                     } else {
